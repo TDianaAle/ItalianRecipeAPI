@@ -1,4 +1,5 @@
 import re
+from typing import Dict
 
 class IngredientTranslator:
     """Traduttore italiano completo con riordino grammaticale"""
