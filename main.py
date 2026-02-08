@@ -2,12 +2,12 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 from typing import Dict
-from translator import IngredientTranslator
+from googletrans import Translator
 
 app = FastAPI(
     title="Italian Recipe API",
-    description="API italiana veloce con Forkify",
-    version="3.0.0"
+    description="API italiana veloce con Forkify + Google Translate",
+    version="3.1.0"
 )
 
 app.add_middleware(
@@ -19,9 +19,10 @@ app.add_middleware(
 )
 
 FORKIFY_BASE = "https://forkify-api.herokuapp.com/api/v2/recipes"
+translator = Translator()
 
 def translate_forkify_recipe(recipe: Dict) -> Dict:
-    """Traduce ricetta completa"""
+    """Traduce ricetta con Google Translate (frasi intere)"""
     ingredients = []
     
     for ing in recipe.get('ingredients', []):
@@ -29,23 +30,39 @@ def translate_forkify_recipe(recipe: Dict) -> Dict:
         unit = ing.get('unit') or ''
         description = ing.get('description', '')
         
-        measure = f"{quantity} {unit}".strip() if quantity else unit
+        # Costruisci frase completa inglese
+        full_text = f"{quantity} {unit} {description}".strip()
         
-        translated = IngredientTranslator.translateFullIngredient(
-            description,
-            measure
-        )
-        
-        ingredients.append({
-            'name': translated['name'],
-            'measure': translated['measure'],
-            'original_name': description,
-            'original_measure': measure
-        })
+        try:
+            # Traduci frase intera
+            translated = translator.translate(full_text, src='en', dest='it').text
+            
+            ingredients.append({
+                'name': translated,
+                'measure': '',  # Già incluso nella traduzione
+                'original_name': description,
+                'original_measure': f"{quantity} {unit}".strip()
+            })
+        except Exception as e:
+            print(f"Errore traduzione ingrediente: {e}")
+            # Fallback: usa originale
+            ingredients.append({
+                'name': description,
+                'measure': f"{quantity} {unit}".strip(),
+                'original_name': description,
+                'original_measure': f"{quantity} {unit}".strip()
+            })
+    
+    # Traduci anche il titolo
+    try:
+        translated_title = translator.translate(recipe.get('title', ''), src='en', dest='it').text
+    except Exception as e:
+        print(f"Errore traduzione titolo: {e}")
+        translated_title = recipe.get('title', '')
     
     return {
         'id': recipe.get('id'),
-        'name': recipe.get('title'),
+        'name': translated_title,
         'category': 'Vegetarian',
         'image': recipe.get('image_url'),
         'ingredients': ingredients,
@@ -73,8 +90,8 @@ def is_vegan(title: str) -> bool:
 @app.get("/")
 async def root():
     return {
-        "message": "🇮🇹 Italian Recipe API v3.0 - VELOCE",
-        "version": "3.0.0",
+        "message": "🇮🇹 Italian Recipe API v3.1 - Google Translate",
+        "version": "3.1.0",
         "endpoints": {
             "preview": "/api/recipes/preview?type=vegetarian|vegan|both",
             "details": "/api/recipes/{id}"
@@ -107,7 +124,7 @@ async def get_recipes_preview(type: str = "vegetarian"):
                     data = response.json()
                     recipes = data.get('data', {}).get('recipes', [])
                     
-                    for recipe in recipes[:50]:  # Max 50 per query
+                    for recipe in recipes[:20]:  # Max 20 per query
                         recipe_id = recipe.get('id')
                         
                         # Evita duplicati
@@ -123,9 +140,15 @@ async def get_recipes_preview(type: str = "vegetarian"):
                         if type == "vegetarian" and is_vegan_recipe:
                             continue
                         
+                        # Traduci titolo
+                        try:
+                            translated_title = translator.translate(recipe.get('title', ''), src='en', dest='it').text
+                        except:
+                            translated_title = recipe.get('title', '')
+                        
                         results.append({
                             'id': recipe_id,
-                            'name': recipe.get('title'),
+                            'name': translated_title,
                             'image': recipe.get('image_url'),
                             'publisher': recipe.get('publisher'),
                             'isVegan': is_vegan_recipe,
@@ -145,7 +168,7 @@ async def get_recipes_preview(type: str = "vegetarian"):
 
 @app.get("/api/recipes/{recipe_id}")
 async def get_recipe_details(recipe_id: str):
-    """Dettagli completi con traduzione"""
+    """Dettagli completi con traduzione Google Translate"""
     async with httpx.AsyncClient(timeout=10.0) as client:
         try:
             response = await client.get(f"{FORKIFY_BASE}/{recipe_id}")
@@ -169,4 +192,4 @@ async def get_recipe_details(recipe_id: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="127.0.0.1", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
