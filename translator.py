@@ -3,7 +3,7 @@ import re
 class IngredientTranslator:
     """Traduttore italiano completo con riordino grammaticale"""
     
-    # DIZIONARIO COMPLETO - OGNI SINGOLA PAROLA
+    # DIZIONARIO 
     WORDS = {
         # Verdure
         'tomato': 'pomodoro',
@@ -282,13 +282,14 @@ class IngredientTranslator:
         'slices': 'fette',
     }
     
-    # FRASI FISSE (eccezioni al riordino)
+    # FRASI FISSE 
     FIXED_PHRASES = {
         'olive oil': 'olio d\'oliva',
         'extra virgin olive oil': 'olio extravergine d\'oliva',
         'soy sauce': 'salsa di soia',
         'bay leaf': 'foglia di alloro',
         'bay leaves': 'foglie di alloro',
+        'bunch of': 'mazzo di',
         'bell pepper': 'peperone',
         'cherry tomato': 'pomodorino',
         'cherry tomatoes': 'pomodorini',
@@ -298,7 +299,7 @@ class IngredientTranslator:
         'spring onions': 'cipollotti',
     }
     
-    # AGGETTIVI (per identificarli)
+    # AGGETTIVI
     ADJECTIVES = {
         'fresh', 'dried', 'frozen', 'canned', 'chopped', 'minced',
         'diced', 'sliced', 'grated', 'ground', 'whole', 'raw',
@@ -319,29 +320,29 @@ class IngredientTranslator:
         
         # 1. Rimuovi prefissi comuni
         lower = re.sub(r'^(a|an|the)\s+', '', lower)
-        lower = re.sub(r'\s*\(.*?\)\s*', '', lower)  # Rimuovi parentesi
+        lower = re.sub(r'\s*\(.*?\)\s*', '', lower) 
         lower = lower.strip()
         
         # 2. Cerca frasi fisse (eccezioni)
         if lower in cls.FIXED_PHRASES:
             return cls.FIXED_PHRASES[lower]
         
-        # 3. Dividi in parole
+        # 3. Divide in parole
         words = lower.split()
         if not words:
             return original
         
-        # 4. Traduci ogni parola
+        # 4. Traduce ogni parola
         translated_words = []
         for word in words:
-            # Rimuovi punteggiatura
+            # Rimuove punteggiatura
             clean_word = word.strip('.,;:')
             if clean_word in cls.WORDS:
                 translated_words.append(cls.WORDS[clean_word])
             else:
                 translated_words.append(clean_word)
         
-        # 5. RIORDINO GRAMMATICALE
+        # RIORDINO GRAMMATICALE
         # Pattern inglese: ADJECTIVE + NOUN → italiano: NOUN + ADJECTIVE
         reordered = cls._reorder_words(words, translated_words)
         
@@ -368,15 +369,15 @@ class IngredientTranslator:
         if not adjectives:
             return ' '.join(translated_words).capitalize()
         
-        # RIORDINO: prima i nomi, poi gli aggettivi
+        # prima i nomi, poi gli aggettivi
         # Es: "fresh red tomato" → "pomodoro rosso fresco"
         result = []
         
-        # Aggiungi nomi
+        # Aggiunge nomi
         for idx, noun in nouns:
             result.append(noun)
         
-        # Aggiungi aggettivi
+        # Aggiunge aggettivi
         for idx, adj in adjectives:
             result.append(adj)
         
@@ -428,5 +429,20 @@ class IngredientTranslator:
             
             return f"{num_str} {translated_unit}".strip()
         except (ValueError, IndexError):
-            # Se non è un numero, ritorna così
             return measure
+    
+    @classmethod
+    def translateFullIngredient(cls, name: str, measure: str) -> Dict[str, str]:
+        """
+        Traduce ingrediente completo (nome + misura)
+        
+        Returns:
+            {"name": "pomodoro", "measure": "200 g"}
+        """
+        translated_name = cls.translate_ingredient(name)
+        translated_measure = cls.translate_measure(measure)
+        
+        return {
+            'name': translated_name,
+            'measure': translated_measure
+        }
