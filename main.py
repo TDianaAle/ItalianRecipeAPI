@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 from typing import Dict
-from googletrans import Translator
+from deep_translator import GoogleTranslator
 
 app = FastAPI(
     title="Italian Recipe API",
@@ -19,7 +19,6 @@ app.add_middleware(
 )
 
 FORKIFY_BASE = "https://forkify-api.herokuapp.com/api/v2/recipes"
-translator = Translator()
 
 def translate_forkify_recipe(recipe: Dict) -> Dict:
     """Traduce ricetta con Google Translate (frasi intere)"""
@@ -35,7 +34,7 @@ def translate_forkify_recipe(recipe: Dict) -> Dict:
         
         try:
             # Traduci frase intera
-            translated = translator.translate(full_text, src='en', dest='it').text
+            translated = GoogleTranslator(source='en', target='it').translate(full_text)
             
             ingredients.append({
                 'name': translated,
@@ -55,7 +54,7 @@ def translate_forkify_recipe(recipe: Dict) -> Dict:
     
     # Traduci anche il titolo
     try:
-        translated_title = translator.translate(recipe.get('title', ''), src='en', dest='it').text
+        translated_title = GoogleTranslator(source='en', target='it').translate(recipe.get('title', ''))
     except Exception as e:
         print(f"Errore traduzione titolo: {e}")
         translated_title = recipe.get('title', '')
@@ -142,7 +141,7 @@ async def get_recipes_preview(type: str = "vegetarian"):
                         
                         # Traduci titolo
                         try:
-                            translated_title = translator.translate(recipe.get('title', ''), src='en', dest='it').text
+                            translated_title = GoogleTranslator(source='en', target='it').translate(recipe.get('title', ''))
                         except:
                             translated_title = recipe.get('title', '')
                         
