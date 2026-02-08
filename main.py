@@ -6,8 +6,8 @@ from translator import IngredientTranslator
 
 app = FastAPI(
     title="Italian Recipe API",
-    description="API italiana con Forkify (1M+ ricette gratuite)",
-    version="2.1.0"
+    description="API italiana veloce con Forkify",
+    version="3.0.0"
 )
 
 app.add_middleware(
@@ -20,242 +20,153 @@ app.add_middleware(
 
 FORKIFY_BASE = "https://forkify-api.herokuapp.com/api/v2/recipes"
 
-# ==================== UTILS ====================
-
 def translate_forkify_recipe(recipe: Dict) -> Dict:
+    """Traduce ricetta completa"""
     ingredients = []
-
-    for ing in recipe.get("ingredients", []):
-        quantity = ing.get("quantity") or ""
-        unit = ing.get("unit") or ""
-        description = ing.get("description", "")
-
-        measure = f"{quantity} {unit}".strip()
-
+    
+    for ing in recipe.get('ingredients', []):
+        quantity = ing.get('quantity') or ''
+        unit = ing.get('unit') or ''
+        description = ing.get('description', '')
+        
+        measure = f"{quantity} {unit}".strip() if quantity else unit
+        
         translated = IngredientTranslator.translateFullIngredient(
             description,
             measure
         )
-
+        
         ingredients.append({
-            "name": translated["name"],
-            "measure": translated["measure"],
-            "original_name": description,
-            "original_measure": measure
+            'name': translated['name'],
+            'measure': translated['measure'],
+            'original_name': description,
+            'original_measure': measure
         })
-
+    
     return {
-        "id": recipe.get("id"),
-        "name": recipe.get("title"),
-        "category": "Vegetarian",
-        "image": recipe.get("image_url"),
-        "ingredients": ingredients,
-        "instructions": recipe.get("source_url"),
-        "servings": recipe.get("servings"),
-        "cookingTime": recipe.get("cooking_time"),
-        "publisher": recipe.get("publisher"),
-        "isVegan": False,
-        "isVegetarian": True,
-        "source": "Forkify"
+        'id': recipe.get('id'),
+        'name': recipe.get('title'),
+        'category': 'Vegetarian',
+        'image': recipe.get('image_url'),
+        'ingredients': ingredients,
+        'instructions': recipe.get('source_url'),
+        'servings': recipe.get('servings'),
+        'cookingTime': recipe.get('cooking_time'),
+        'publisher': recipe.get('publisher'),
+        'isVegan': is_vegan(recipe.get('title', '')),
+        'isVegetarian': True,
+        'source': 'Forkify'
     }
 
-
-def is_vegetarian_recipe(recipe: Dict) -> bool:
-    non_veg = [
-        "chicken", "beef", "pork", "fish", "meat", "bacon",
-        "turkey", "lamb", "duck", "salmon", "tuna", "shrimp",
-        "pollo", "manzo", "maiale", "pesce", "carne"
-    ]
-
-    text = (
-        recipe.get("title", "").lower() +
-        " ".join(i.get("description", "").lower()
-                 for i in recipe.get("ingredients", []))
-    )
-
-    return not any(k in text for k in non_veg)
-
-
-def is_vegan_recipe(recipe: Dict) -> bool:
-    non_vegan = [
-        "egg", "milk", "cheese", "butter", "cream",
-        "yogurt", "honey", "uovo", "latte",
-        "formaggio", "burro", "panna"
-    ]
-
-    text = " ".join(
-        i.get("description", "").lower()
-        for i in recipe.get("ingredients", [])
-    )
-
-    if any(k in text for k in non_vegan):
+def is_vegan(title: str) -> bool:
+    """Controllo veloce su titolo"""
+    title_lower = title.lower()
+    vegan_keywords = ['vegan', 'plant-based', 'plant based']
+    non_vegan = ['egg', 'cheese', 'butter', 'milk', 'cream', 'yogurt', 'chicken', 'meat', 'fish']
+    
+    if any(k in title_lower for k in vegan_keywords):
+        return True
+    if any(k in title_lower for k in non_vegan):
         return False
-
-    return is_vegetarian_recipe(recipe)
-
-# ==================== ENDPOINTS ====================
+    return False
 
 @app.get("/")
 async def root():
     return {
-        "message": "🇮🇹 Italian Recipe API",
-        "version": "2.1.0",
-        "endpoints": [
-            "/api/recipes/vegetarian",
-            "/api/recipes/vegan",
-            "/api/recipes/search?q=pasta",
-            "/api/recipes/{id}"
-        ]
+        "message": "🇮🇹 Italian Recipe API v3.0 - VELOCE",
+        "version": "3.0.0",
+        "endpoints": {
+            "preview": "/api/recipes/preview?type=vegetarian|vegan|both",
+            "details": "/api/recipes/{id}"
+        }
     }
 
-
-@app.get("/api/recipes/vegetarian")
-async def get_vegetarian_recipes():
-    async with httpx.AsyncClient(timeout=30) as client:
+@app.get("/api/recipes/preview")
+async def get_recipes_preview(type: str = "vegetarian"):
+    """
+    Preview ricette VELOCI (solo lista, no dettagli)
+    type: vegetarian | vegan | both
+    """
+    async with httpx.AsyncClient(timeout=15.0) as client:
         results = []
         seen_ids = set()
-
-        queries = ["vegetarian", "pasta", "salad", "vegetables", "quinoa"]
-
+        
+        # Decidi quali query fare
+        if type == "both":
+            queries = ["vegetarian", "vegan"]
+        elif type == "vegan":
+            queries = ["vegan"]
+        else:
+            queries = ["vegetarian"]
+        
         for query in queries:
-            r = await client.get(f"{FORKIFY_BASE}?search={query}")
-            if r.status_code != 200:
+            try:
+                response = await client.get(f"{FORKIFY_BASE}?search={query}")
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    recipes = data.get('data', {}).get('recipes', [])
+                    
+                    for recipe in recipes[:20]:  # Max 20 per query
+                        recipe_id = recipe.get('id')
+                        
+                        # Evita duplicati
+                        if recipe_id in seen_ids:
+                            continue
+                        seen_ids.add(recipe_id)
+                        
+                        is_vegan_recipe = is_vegan(recipe.get('title', ''))
+                        
+                        # Filtro solo se NON è "both"
+                        if type == "vegan" and not is_vegan_recipe:
+                            continue
+                        if type == "vegetarian" and is_vegan_recipe:
+                            continue
+                        
+                        results.append({
+                            'id': recipe_id,
+                            'name': recipe.get('title'),
+                            'image': recipe.get('image_url'),
+                            'publisher': recipe.get('publisher'),
+                            'isVegan': is_vegan_recipe,
+                            'isVegetarian': True
+                        })
+            
+            except Exception as e:
+                print(f"Error query {query}: {e}")
                 continue
-
-            recipes = r.json().get("data", {}).get("recipes", [])
-
-            for preview in recipes:
-                rid = preview["id"]
-                if rid in seen_ids:
-                    continue
-
-                seen_ids.add(rid)
-
-                detail = await client.get(f"{FORKIFY_BASE}/{rid}")
-                if detail.status_code != 200:
-                    continue
-
-                recipe = detail.json().get("data", {}).get("recipe", {})
-                if not is_vegetarian_recipe(recipe):
-                    continue
-
-                translated = translate_forkify_recipe(recipe)
-                translated["isVegan"] = is_vegan_recipe(recipe)
-
-                results.append(translated)
-
-                if len(results) >= 30:
-                    break
-
-            if len(results) >= 30:
-                break
-
+        
         return {
             "success": True,
             "count": len(results),
             "recipes": results,
             "source": "Forkify"
         }
-
-
-@app.get("/api/recipes/vegan")
-async def get_vegan_recipes():
-    async with httpx.AsyncClient(timeout=30) as client:
-        results = []
-        seen_ids = set()
-
-        queries = ["vegan", "plant-based", "tofu", "chickpea"]
-
-        for query in queries:
-            r = await client.get(f"{FORKIFY_BASE}?search={query}")
-            if r.status_code != 200:
-                continue
-
-            recipes = r.json().get("data", {}).get("recipes", [])
-
-            for preview in recipes:
-                rid = preview["id"]
-                if rid in seen_ids:
-                    continue
-
-                seen_ids.add(rid)
-
-                detail = await client.get(f"{FORKIFY_BASE}/{rid}")
-                if detail.status_code != 200:
-                    continue
-
-                recipe = detail.json().get("data", {}).get("recipe", {})
-                if not is_vegan_recipe(recipe):
-                    continue
-
-                translated = translate_forkify_recipe(recipe)
-                translated["isVegan"] = True
-                translated["isVegetarian"] = True
-
-                results.append(translated)
-
-                if len(results) >= 30:
-                    break
-
-            if len(results) >= 30:
-                break
-
-        return {
-            "success": True,
-            "count": len(results),
-            "recipes": results,
-            "source": "Forkify"
-        }
-
-
-@app.get("/api/recipes/search")
-async def search_recipes(q: str):
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.get(f"{FORKIFY_BASE}?search={q}")
-        if r.status_code != 200:
-            raise HTTPException(500, "Forkify error")
-
-        results = []
-        seen_ids = set()
-
-        for preview in r.json().get("data", {}).get("recipes", [])[:20]:
-            rid = preview["id"]
-            if rid in seen_ids:
-                continue
-
-            seen_ids.add(rid)
-
-            detail = await client.get(f"{FORKIFY_BASE}/{rid}")
-            if detail.status_code != 200:
-                continue
-
-            recipe = detail.json().get("data", {}).get("recipe", {})
-            if not is_vegetarian_recipe(recipe):
-                continue
-
-            translated = translate_forkify_recipe(recipe)
-            translated["isVegan"] = is_vegan_recipe(recipe)
-
-            results.append(translated)
-
-        return {
-            "success": True,
-            "count": len(results),
-            "recipes": results,
-            "source": "Forkify"
-        }
-
 
 @app.get("/api/recipes/{recipe_id}")
 async def get_recipe_details(recipe_id: str):
-    async with httpx.AsyncClient(timeout=30) as client:
-        r = await client.get(f"{FORKIFY_BASE}/{recipe_id}")
-        if r.status_code != 200:
-            raise HTTPException(404, "Recipe not found")
+    """Dettagli completi con traduzione"""
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            response = await client.get(f"{FORKIFY_BASE}/{recipe_id}")
+            
+            if response.status_code == 200:
+                data = response.json()
+                recipe = data.get('data', {}).get('recipe', {})
+                
+                if recipe:
+                    translated = translate_forkify_recipe(recipe)
+                    
+                    return {
+                        "success": True,
+                        "recipe": translated
+                    }
+            
+            raise HTTPException(status_code=404, detail="Recipe not found")
+            
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
 
-        recipe = r.json().get("data", {}).get("recipe", {})
-        translated = translate_forkify_recipe(recipe)
-        translated["isVegan"] = is_vegan_recipe(recipe)
-        translated["isVegetarian"] = is_vegetarian_recipe(recipe)
-
-        return {"success": True, "recipe": translated}
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="127.0.0.1", port=8000)
