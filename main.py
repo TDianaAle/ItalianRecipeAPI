@@ -107,7 +107,7 @@ async def get_recipes_preview(type: str = "vegetarian"):
                     data = response.json()
                     recipes = data.get('data', {}).get('recipes', [])
                     
-                    for recipe in recipes[:20]:  # Max 20 per query
+                    for recipe in recipes[:50]:  # Max 50 per query
                         recipe_id = recipe.get('id')
                         
                         # Evita duplicati
