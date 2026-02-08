@@ -1,243 +1,145 @@
 import re
 from typing import Dict
 
-
 class IngredientTranslator:
-    """
-    Traduttore deterministico EN → IT per ingredienti culinari.
-    Produce frasi italiane naturali con accordi automatici.
-    """
+    """Traduttore avanzato ingredienti API → Italiano naturale"""
+    
+    # Dizionario base parola→parola
+    WORDS = {
+        # Verdure e frutta
+        'tomato':'pomodoro','tomatoes':'pomodori','onion':'cipolla','onions':'cipolle',
+        'garlic':'aglio','carrot':'carota','carrots':'carote','potato':'patata','potatoes':'patate',
+        'eggplant':'melanzana','zucchini':'zucchina','courgette':'zucchina','bell':'peperone',
+        'pepper':'peperone','peppers':'peperoni','chili':'peperoncino','mushroom':'fungo',
+        'mushrooms':'funghi','spinach':'spinaci','lettuce':'lattuga','cucumber':'cetriolo',
+        'broccoli':'broccoli','cauliflower':'cavolfiore','celery':'sedano','cabbage':'cavolo',
+        'kale':'cavolo riccio','asparagus':'asparagi','peas':'piselli','bean':'fagiolo',
+        'beans':'fagioli','lentil':'lenticchia','lentils':'lenticchie','chickpea':'cece',
+        'chickpeas':'ceci','corn':'mais','pumpkin':'zucca','squash':'zucca','beetroot':'barbabietola',
+        'beet':'barbabietola','radish':'ravanello','leek':'porro','fennel':'finocchio','artichoke':'carciofo',
+        'apple':'mela','apples':'mele','banana':'banana','bananas':'banane','orange':'arancia',
+        'oranges':'arance','lemon':'limone','lemons':'limoni','lime':'lime','strawberry':'fragola',
+        'strawberries':'fragole','blueberry':'mirtillo','blueberries':'mirtilli','raspberry':'lampone',
+        'raspberries':'lamponi','cherry':'ciliegia','cherries':'ciliegie','peach':'pesca','pear':'pera',
+        'plum':'prugna','grape':'uva','grapes':'uva','melon':'melone','watermelon':'anguria',
+        'pineapple':'ananas','mango':'mango','avocado':'avocado','kiwi':'kiwi','fig':'fico','date':'dattero',
+        'raisin':'uvetta',
+        
+        # Legumi, cereali, tofu
+        'rice':'riso','pasta':'pasta','bread':'pane','flour':'farina','wheat':'grano','oat':'avena',
+        'oats':'avena','barley':'orzo','quinoa':'quinoa','couscous':'couscous','bulgur':'bulgur',
+        'tofu':'tofu','tempeh':'tempeh',
+        
+        # Condimenti
+        'oil':'olio','olive':'oliva','salt':'sale','pepper':'pepe','vinegar':'aceto','balsamic':'balsamico',
+        'soy':'soia','sauce':'salsa','ketchup':'ketchup','mayonnaise':'maionese','honey':'miele',
+        'sugar':'zucchero','butter':'burro','milk':'latte','cream':'panna','cheese':'formaggio','yogurt':'yogurt',
+        'egg':'uovo','eggs':'uova','water':'acqua','stock':'brodo','broth':'brodo','vegetable':'vegetale',
+        
+        # Frutta secca e semi
+        'almond':'mandorla','almonds':'mandorle','walnut':'noce','walnuts':'noci','hazelnut':'nocciola',
+        'hazelnuts':'nocciole','pistachio':'pistacchio','pistachios':'pistacchi','cashew':'anacardo',
+        'cashews':'anacardi','peanut':'arachide','peanuts':'arachidi','pine':'pinolo','nut':'noce','nuts':'noci',
+        'seed':'seme','seeds':'semi','sunflower':'girasole','pumpkin':'zucca','sesame':'sesamo','chia':'chia',
+        'flax':'lino',
+        
+        # Aggettivi e azioni
+        'fresh':'fresco','dried':'secco','frozen':'congelato','canned':'in scatola','chopped':'tritato',
+        'minced':'tritato finemente','diced':'a cubetti','sliced':'affettato','grated':'grattugiato',
+        'ground':'macinato','whole':'intero','raw':'crudo','cooked':'cotto','fried':'fritto','roasted':'arrostito',
+        'baked':'al forno','steamed':'al vapore','boiled':'bollito','grilled':'grigliato','smoked':'affumicato',
+        'peeled':'sbucciato','pitted':'denocciolato','seeded':'privato dei semi','lengthwise':'longitudinalmente',
+        'cut':'tagliato','into':'in','thin':'sottile','medium':'medio','large':'grande','small':'piccolo',
+        'extra':'extra','virgin':'vergine','red':'rosso','green':'verde','yellow':'giallo','white':'bianco',
+        'black':'nero','brown':'marrone','orange':'arancione',
+        
+        # Contenitori
+        'can':'barattolo','jar':'vasetto','tube':'tubo','container':'contenitore','bunch':'mazzo','cup':'tazza',
+    }
 
-    # ==================================================
-    # UNITÀ DI MISURA
-    # ==================================================
     UNITS = {
-        "tsp": "cucchiaino",
-        "tsps": "cucchiaini",
-        "tbsp": "cucchiaio",
-        "tbsps": "cucchiai",
-        "cup": "tazza",
-        "cups": "tazze",
-        "g": "g",
-        "kg": "kg",
-        "ml": "ml",
-        "oz": "oz",
-        "lb": "lb",
-        "can": "barattolo",
-        "jar": "vasetto",
-        "container": "contenitore",
+        'tsp':'cucchiaino','tsps':'cucchiaini','teaspoon':'cucchiaino','teaspoons':'cucchiaini',
+        'tbsp':'cucchiaio','tbsps':'cucchiai','tablespoon':'cucchiaio','tablespoons':'cucchiai',
+        'cup':'tazza','cups':'tazze','ml':'ml','l':'litro','liter':'litro','liters':'litri',
+        'g':'g','kg':'kg','gram':'grammo','grams':'grammi','oz':'oz','lb':'libbra','pinch':'pizzico',
+        'dash':'pizzico','clove':'spicchio','cloves':'spicchi','piece':'pezzo','pieces':'pezzi',
+        'slice':'fetta','slices':'fette'
     }
 
-    # ==================================================
-    # BASE INGREDIENTI (con numero grammaticale)
-    # ==================================================
-    # value = (traduzione, numero)
-    # numero: "singular" | "plural"
-    BASE_INGREDIENTS = {
-        "green bell pepper": ("peperone verde", "singular"),
-        "red bell pepper": ("peperone rosso", "singular"),
-        "yellow bell pepper": ("peperone giallo", "singular"),
-        "bell pepper": ("peperone", "singular"),
+    ADJECTIVES = set([
+        'fresh','dried','frozen','canned','chopped','minced','diced','sliced','grated','ground','whole',
+        'raw','cooked','fried','roasted','baked','steamed','boiled','grilled','smoked','peeled','pitted',
+        'seeded','lengthwise','thin','medium','large','small','extra','virgin','red','green','yellow','white',
+        'black','brown','orange'
+    ])
 
-        "black beans": ("fagioli neri", "plural"),
-        "beans": ("fagioli", "plural"),
-        "bean": ("fagiolo", "singular"),
-
-        "whole kernel corn": ("mais in chicchi", "singular"),
-        "kernel corn": ("mais in chicchi", "singular"),
-
-        "garlic salt": ("sale all'aglio", "singular"),
-
-        "extra-firm tofu": ("tofu extra compatto", "singular"),
-        "firm tofu": ("tofu compatto", "singular"),
-        "tofu": ("tofu", "singular"),
-
-        "avocados": ("avocado", "plural"),
-        "avocado": ("avocado", "singular"),
-
-        "onions": ("cipolle", "plural"),
-        "onion": ("cipolla", "singular"),
-
-        "zucchini": ("zucchina", "singular"),
+    FIXED_PHRASES = {
+        'olive oil':"olio d'oliva",'extra virgin olive oil':"olio extravergine d'oliva",
+        'soy sauce':"salsa di soia",'bay leaf':"foglia di alloro",'bay leaves':"foglie di alloro",
+        'bell pepper':"peperone",'cherry tomato':"pomodorino",'cherry tomatoes':"pomodorini",
+        'spring onion':"cipollotto",'spring onions':"cipollotti",
     }
 
-    # ==================================================
-    # STATI (forma maschile singolare → accordata dopo)
-    # ==================================================
-    STATES = {
-        "drained": "scolato",
-        "undrained": "non scolato",
-        "peeled": "sbucciato",
-        "pitted": "denocciolato",
-        "seeded": "privato dei semi",
-        "pat dry": "asciugato",
-        "to taste": "q.b.",
-    }
-
-    # ==================================================
-    # AZIONI
-    # ==================================================
-    ACTIONS = {
-        "cut into thin strips": "tagliato a striscioline sottili",
-        "cut into strips": "tagliato a strisce",
-        "cut into thin 1-inch segments": "tagliato in segmenti sottili da 2,5 cm",
-        "cut into cubes": "tagliato a cubetti",
-        "cut into 1/2 inch cubes": "tagliato a cubetti da 1,5 cm",
-        "julienned": "a julienne",
-        "sliced": "affettato",
-        "chopped": "tritato",
-        "minced": "tritato finemente",
-    }
-
-    # ==================================================
-    # API PUBBLICA
-    # ==================================================
-    @classmethod
-    def translateFullIngredient(cls, name: str, measure: str) -> Dict[str, str]:
-        return {
-            "name": cls.translate_ingredient(name),
-            "measure": cls.translate_measure(measure),
-        }
-
-    # ==================================================
-    # TRADUZIONE INGREDIENTE
-    # ==================================================
     @classmethod
     def translate_ingredient(cls, ingredient: str) -> str:
-        if not ingredient:
-            return ""
+        """Traduzione completa ingrediente in italiano naturale"""
+        if not ingredient: return ''
+        lower = ingredient.lower().strip()
+        lower = re.sub(r'^(a|an|the)\s+', '', lower)
+        lower = re.sub(r'\s*\(.*?\)\s*', '', lower)
 
-        text = ingredient.lower()
-        text = re.sub(r"\(.*?\)", "", text)
-        text = text.replace("-", " ")
-        text = text.strip()
+        # Frasi fisse
+        if lower in cls.FIXED_PHRASES:
+            return cls.FIXED_PHRASES[lower]
 
-        data = cls._parse_semantics(text)
-        phrase = cls._build_italian_phrase(data)
+        # Split parole
+        words = re.split(r'[\s,]+', lower)
+        translated_words = [cls.WORDS.get(w, w) for w in words]
 
-        return phrase.capitalize() if phrase else ingredient.capitalize()
+        # Riordino aggettivi
+        nouns = [t for i,t in enumerate(translated_words) if words[i] not in cls.ADJECTIVES]
+        adjectives = [t for i,t in enumerate(translated_words) if words[i] in cls.ADJECTIVES]
 
-    # ==================================================
-    # PARSING SEMANTICO
-    # ==================================================
+        # Combina in frase italiana naturale
+        result = nouns + adjectives
+        return ' '.join(result).capitalize()
+
     @classmethod
-    def _parse_semantics(cls, text: str) -> dict:
-        data = {
-            "base": None,
-            "number": "singular",
-            "states": [],
-            "actions": [],
-        }
-
-        # base ingrediente (frasi lunghe prima)
-        for key, (value, number) in sorted(
-            cls.BASE_INGREDIENTS.items(), key=lambda x: -len(x[0])
-        ):
-            if key in text:
-                data["base"] = value
-                data["number"] = number
-                break
-
-        # stati
-        for key, value in cls.STATES.items():
-            if key in text:
-                data["states"].append(value)
-
-        # azioni
-        for key, value in sorted(cls.ACTIONS.items(), key=lambda x: -len(x[0])):
-            if key in text:
-                data["actions"].append(value)
-
-        return data
-
-    # ==================================================
-    # COSTRUZIONE FRASE + ACCORDI
-    # ==================================================
-    @classmethod
-    def _build_italian_phrase(cls, data: dict) -> str:
-        if not data["base"]:
-            return ""
-
-        parts = [data["base"]]
-
-        # stati con accordo
-        if data["states"]:
-            agreed_states = [
-                cls._agree(state, data["number"])
-                for state in data["states"]
-            ]
-            parts.append(", ".join(agreed_states))
-
-        # azioni con accordo
-        if data["actions"]:
-            agreed_actions = [
-                cls._agree(action, data["number"])
-                for action in data["actions"]
-            ]
-            parts.append(" ".join(agreed_actions))
-
-        return " ".join(parts)
-
-    # ==================================================
-    # ACCORDO SINGOLARE / PLURALE
-    # ==================================================
-    @staticmethod
-    def _agree(text: str, number: str) -> str:
-        """
-        Applica accordo grammaticale semplice
-        maschile singolare → maschile plurale
-        """
-        if number == "singular":
-            return text
-
-        # regole minime per participi
-        replacements = {
-            "ato": "ati",
-            "uto": "uti",
-            "ito": "iti",
-            "o": "i",
-        }
-
-        for sing, plur in replacements.items():
-            if text.endswith(sing):
-                return text[:-len(sing)] + plur
-
-        return text
-
-    # ==================================================
-    # TRADUZIONE MISURA
-    # ==================================================
-    @classmethod
-    def translate_unit(cls, unit: str, quantity: float = 1) -> str:
-        if not unit:
-            return ""
-
-        unit = unit.lower().strip()
-        translated = cls.UNITS.get(unit, unit)
-
-        if quantity == 1:
-            translated = translated.replace("cucchiai", "cucchiaio")
-            translated = translated.replace("cucchiaini", "cucchiaino")
-            translated = translated.replace("tazze", "tazza")
-
+    def translate_unit(cls, unit: str, quantity: float=1) -> str:
+        if not unit: return ''
+        lower = unit.lower().strip()
+        translated = cls.UNITS.get(lower, unit)
+        if quantity==1:
+            translated = re.sub(r's$', '', translated)
         return translated
 
     @classmethod
     def translate_measure(cls, measure: str) -> str:
-        if not measure or measure.strip() == "":
-            return ""
-
-        parts = measure.strip().lower().split(" ", 1)
-
+        if not measure or measure.strip()=='': return ''
+        parts = measure.strip().split(' ',1)
         try:
-            qty = float(parts[0])
-            unit = parts[1] if len(parts) > 1 else ""
-
-            unit_it = cls.translate_unit(unit, qty)
-
-            if qty.is_integer():
-                qty = int(qty)
-
-            return f"{qty} {unit_it}".strip()
-        except Exception:
+            quantity = float(parts[0])
+            unit = parts[1] if len(parts)>1 else ''
+            translated_unit = cls.translate_unit(unit, quantity)
+            num_str = str(int(quantity)) if quantity==int(quantity) else str(quantity)
+            return f"{num_str} {translated_unit}".strip()
+        except (ValueError, IndexError):
             return measure
+
+    @classmethod
+    def translate_full(cls, name:str, measure:str) -> Dict[str,str]:
+        return {
+            'name': cls.translate_ingredient(name),
+            'measure': cls.translate_measure(measure)
+        }
+
+# --- Esempio ---
+if __name__=="__main__":
+    sample_ingredients = [
+        {"name":"large red bell pepper","measure":"1"},
+        {"name":"barattolo fagioli drained nero","measure":"1"},
+        {"name":"Banane lengthwise affettato","measure":"2"},
+        {"name":"olio d'oliva","measure":"2 tbsps"}
+    ]
+    for ing in sample_ingredients:
+        print(IngredientTranslator.translate_full(ing['name'], ing['measure']))
