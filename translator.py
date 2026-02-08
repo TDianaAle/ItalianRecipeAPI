@@ -81,6 +81,11 @@ class IngredientTranslator:
     }
 
     @classmethod
+    def translateFullIngredient(cls, name: str, measure: str) -> Dict[str, str]:
+        """Alias per compatibilità backend"""
+        return cls.translate_full(name, measure)
+
+    @classmethod
     def translate_ingredient(cls, ingredient: str) -> str:
         """Traduzione completa ingrediente in italiano naturale"""
         if not ingredient: return ''
